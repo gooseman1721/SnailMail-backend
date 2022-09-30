@@ -14,9 +14,9 @@ def get_user_count(db: Session):
 def get_many_users(db: Session, how_many: int):
     return db.query(models.User).limit(how_many).all()
 
-def get_user_messages(db: Session, user_id: int):
-    return (db.query(models.User.received_messages).filter(models.User.id == user_id),
-            db.query(models.User.sent_messages).filter(models.User.id == user_id))
+def get_user_received_messages(db: Session, user_id: int):
+    return db.query(models.Message).filter(
+        models.Message.receiver_id == user_id).all()
 
 def create_user(db: Session, user: schemas.UserCreate):
     not_hashed_password = user.password + "hashash"
