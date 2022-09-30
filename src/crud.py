@@ -8,6 +8,12 @@ def get_user(db: Session, user_id: int):
 def get_user_by_username(db: Session, username: str):
     return db.query(models.User).filter(models.User.user_name == username).first()
 
+def get_user_count(db: Session):
+    return db.query(models.User).count()
+
+def get_many_users(db: Session, how_many: int):
+    return db.query(models.User).limit(how_many).all()
+
 def get_user_messages(db: Session, user_id: int):
     return (db.query(models.User.received_messages).filter(models.User.id == user_id),
             db.query(models.User.sent_messages).filter(models.User.id == user_id))
