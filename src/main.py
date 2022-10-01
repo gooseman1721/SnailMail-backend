@@ -18,7 +18,7 @@ def get_db():
 
 @app.post("/users/", response_model=schemas.User)
 def create_user(user:schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = crud.get_user_by_username(db=db, username=user.user_name)
+    db_user = crud.get_user_by_username(db=db, user_name=user.user_name)
     if db_user:
         raise HTTPException(status_code=400, detail="Username already exists")
     
@@ -63,6 +63,19 @@ def get_all_users(db: Session = Depends(get_db)):
 
 
 @app.post("/messages/")
-def create_message(message: schemas.MessageCreate, sender_id: int, receiver_id: int, db: Session=Depends(get_db)):
+def create_message(message: schemas.MessageCreate, sender_id: int, receiver_id: int, db: Session = Depends(get_db)):
     return crud.create_message(db=db, message=message, sender_id=sender_id, receiver_id=receiver_id)
 
+
+@app.post("/login/")
+def user_login(user_name: str, cleartext_password: str, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_username(db=db, user_name=user_name)
+    if db_user is None:
+        raise HTTPException(
+            status_code=401, detail="Username incorrect")
+    if not crud.verify_password(password=cleartext_password, hashed_password=crud.get_user_hashed_password(db=db, user_name=user_name)):
+        raise HTTPException(
+            status_code=401, detail="Password incorrect.")
+
+    else:
+        return("Login attempt successful")
