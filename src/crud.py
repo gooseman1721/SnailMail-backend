@@ -23,8 +23,7 @@ def get_many_users(db: Session, how_many: int):
 
 
 def get_user_received_messages(db: Session, user_id: int):
-    return db.query(models.Message).filter(
-        models.Message.receiver_id == user_id).all()
+    return db.query(models.Message).filter(models.Message.receiver_id == user_id).all()
 
 
 def create_user(db: Session, user: schemas.UserCreate):
@@ -36,12 +35,16 @@ def create_user(db: Session, user: schemas.UserCreate):
     return db_user
 
 
-def create_message(db: Session, message: schemas.MessageCreate, sender_id: int, receiver_id: int):
-    db_message = models.Message(content=message.content, sender_id=sender_id, receiver_id=receiver_id)
+def create_message(
+    db: Session, message: schemas.MessageCreate, sender_id: int, receiver_id: int
+):
+    db_message = models.Message(
+        content=message.content, sender_id=sender_id, receiver_id=receiver_id
+    )
     db.add(db_message)
     db.commit()
     db.refresh(db_message)
-    return(db_message)
+    return db_message
 
 
 def hash_password(cleartext_password):
@@ -60,5 +63,10 @@ def verify_password(password, hashed_password):
             # put new password into db..
         return True
 
+
 def get_user_hashed_password(db: Session, user_name: str):
-    return db.query(models.User.hashed_password).filter(models.User.user_name == user_name).scalar()
+    return (
+        db.query(models.User.hashed_password)
+        .filter(models.User.user_name == user_name)
+        .scalar()
+    )
