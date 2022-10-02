@@ -119,21 +119,40 @@ def auth_test(
         hashed_password=crud.get_user_hashed_password(
             db=db, user_name=form_data.username
         ),
+        db=db,
     ):
         raise HTTPException(status_code=401, detail="Password incorrect.")
 
-    return {"access_token": form_data.username, "token_type": "bearer"}
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": form_data.username}, expires_delta=access_token_expires
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 @app.get("/users/me/", response_model=schemas.User)
 def read_users_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    user = fake_decode_token(token, db=db)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload = jwt.decode(token=token, key=SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = schemas.TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
+
+    user = crud.get_user_by_username(db=db, user_name=token_data.username)
+
+    if user is None:
+        raise credentials_exception
+
     return user
 
 

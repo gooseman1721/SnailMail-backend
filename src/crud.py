@@ -51,7 +51,7 @@ def hash_password(cleartext_password):
     return ph.hash(cleartext_password)
 
 
-def verify_password(password, hashed_password):
+def verify_password(password: str, hashed_password: str, db: Session):
     try:
         print(ph.verify(hashed_password, password))
         ph.verify(hashed_password, password)
@@ -61,6 +61,7 @@ def verify_password(password, hashed_password):
         if ph.check_needs_rehash(hashed_password):
             new_password = ph.hash(password)
             # put new password into db..
+            
         return True
 
 
