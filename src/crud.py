@@ -13,6 +13,11 @@ def get_user(db: Session, user_id: int):
 def get_user_by_username(db: Session, user_name: str):
     return db.query(models.User).filter(models.User.user_name == user_name).first()
 
+def convert_user_id_to_user_name(db: Session, user_id: int):
+    return db.query(models.User.user_name).filter(models.User.id == user_id).scalar()
+
+def convert_user_name_to_user_id(db: Session, user_name: str):
+    return db.query(models.User.id).filter(models.User.user_name == user_name).scalar()
 
 def get_user_count(db: Session):
     return db.query(models.User).count()
@@ -24,6 +29,9 @@ def get_many_users(db: Session, how_many: int):
 
 def get_user_received_messages(db: Session, user_id: int):
     return db.query(models.Message).filter(models.Message.receiver_id == user_id).all()
+
+def get_user_sent_messages(db: Session, user_id: int):
+    return db.query(models.Message).filter(models.Message.sender_id == user_id).all()
 
 
 def create_user(db: Session, user: schemas.UserCreate):
@@ -61,7 +69,7 @@ def verify_password(password: str, hashed_password: str, db: Session):
         if ph.check_needs_rehash(hashed_password):
             new_password = ph.hash(password)
             # put new password into db..
-            
+
         return True
 
 

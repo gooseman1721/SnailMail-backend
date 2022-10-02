@@ -101,7 +101,7 @@ def create_message(
     sender_id: int,
     receiver_id: int,
     db: Session = Depends(get_db),
-    token: str = Depends(oauth2_scheme),
+    # token: str = Depends(oauth2_scheme),
 ):
     return crud.create_message(
         db=db, message=message, sender_id=sender_id, receiver_id=receiver_id
@@ -163,6 +163,30 @@ def read_users_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get
     token_data = authenticate_user(token=token, db=db)
     user = crud.get_user_by_username(db=db, user_name=token_data.username)
     return user
+
+
+@app.get("/users/me/my_messages/received", response_model=list[schemas.Message])
+def read_users_me_messages_received(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+):
+    token_data = authenticate_user(token=token, db=db)
+    received_messages = crud.get_user_received_messages(
+        db=db,
+        user_id=crud.convert_user_name_to_user_id(db=db, user_name=token_data.username),
+    )
+    return received_messages
+
+
+@app.get("/users/me/my_messages/sent", response_model=list[schemas.Message])
+def read_users_me_messages_sent(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+):
+    token_data = authenticate_user(token=token, db=db)
+    sent_messages = crud.get_user_sent_messages(
+        db=db,
+        user_id=crud.convert_user_name_to_user_id(db=db, user_name=token_data.username),
+    )
+    return sent_messages
 
 
 @app.exception_handler(RequestValidationError)
