@@ -101,6 +101,7 @@ def create_message(
     sender_id: int,
     receiver_id: int,
     db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme),
 ):
     return crud.create_message(
         db=db, message=message, sender_id=sender_id, receiver_id=receiver_id
@@ -131,8 +132,9 @@ def auth_test(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@app.get("/users/me/", response_model=schemas.User)
-def read_users_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+def authenticate_user(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -152,7 +154,14 @@ def read_users_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get
 
     if user is None:
         raise credentials_exception
+    else:
+        return token_data
 
+
+@app.get("/users/me/", response_model=schemas.User)
+def read_users_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    token_data = authenticate_user(token=token, db=db)
+    user = crud.get_user_by_username(db=db, user_name=token_data.username)
     return user
 
 
