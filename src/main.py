@@ -1,10 +1,13 @@
 from datetime import datetime, timedelta
+from pydantic import BaseModel
 
-from fastapi import Depends, FastAPI, HTTPException, status, Request
+from fastapi import Depends, FastAPI, HTTPException, status, Request, Response
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
+from fastapi.middleware.cors import CORSMiddleware
+
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 import uvicorn
@@ -21,8 +24,24 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 120
 
 app = FastAPI()
 
+origins = [
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:8080",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth_test")
 
+class BasicResponse(BaseModel):
+    response_text: str
 
 def get_db():
     db = SessionLocal()
@@ -45,6 +64,12 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 
 def fake_decode_token(token, db: Session = Depends(get_db)):
     return crud.get_user_by_username(db=db, user_name=token)
+
+
+@app.get("/ping/", response_model=BasicResponse)
+def ping():
+    time = datetime.utcnow()
+    return {"response_text": str(time)}
 
 
 @app.post("/users/", response_model=schemas.User)
