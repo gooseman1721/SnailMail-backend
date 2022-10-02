@@ -95,16 +95,26 @@ def get_all_users(db: Session = Depends(get_db)):
 @app.post("/messages/")
 def create_message(
     message: schemas.MessageCreate,
-    sender_id: int,
-    receiver_id: int,
+    sender_name: str,
+    receiver_name: str,
     db: Session = Depends(get_db),
     token: str = Depends(oauth2_scheme),
 ):
     token_data = authenticate_user(token=token, db=db)
     user_id = crud.convert_user_name_to_user_id(db=db, user_name=token_data.username)
 
+    try:
+        sender_id = crud.convert_user_name_to_user_id(db=db, user_name=sender_name)
+    except:
+        raise HTTPException(status_code=404, detail="Sender username not found")
+
+    try:
+        receiver_id = crud.convert_user_name_to_user_id(db=db, user_name=receiver_name)
+    except:
+        raise HTTPException(status_code=404, detail="Receiver username not found")
+
     if user_id != sender_id:
-        raise HTTPException(status_code=401, detail="Unauthorized sender")
+        raise HTTPException(status_code=401, detail="Token and user id mismatch")
 
     db_receiver = crud.get_user(db=db, user_id=receiver_id)
 
