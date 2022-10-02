@@ -1,12 +1,29 @@
-from fastapi import Depends, FastAPI, HTTPException
+from datetime import datetime, timedelta
+from msilib import schema
+from tkinter import E
+
+from fastapi import Depends, FastAPI, HTTPException, status, Request
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
+from jose import JWTError, jwt
+import uvicorn
 
 from . import crud, models, schemas
 from .database import SessionLocal, engine
 
 models.Base.metadata.create_all(bind=engine)
 
+# openssl rand -hex 32
+SECRET_KEY = "835bc2696948b6a858506058675922bf67e19d3f49b065bb12c884b2f5a27016"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 120
+
 app = FastAPI()
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth_test")
 
 
 def get_db():
@@ -15,6 +32,21 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+def fake_decode_token(token, db: Session = Depends(get_db)):
+    return crud.get_user_by_username(db=db, user_name=token)
 
 
 @app.post("/users/", response_model=schemas.User)
@@ -75,16 +107,43 @@ def create_message(
     )
 
 
-@app.post("/login/")
-def user_login(user_name: str, cleartext_password: str, db: Session = Depends(get_db)):
-    db_user = crud.get_user_by_username(db=db, user_name=user_name)
+@app.post("/auth_test/")
+def auth_test(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+):
+    db_user = crud.get_user_by_username(db=db, user_name=form_data.username)
     if db_user is None:
         raise HTTPException(status_code=401, detail="Username incorrect")
     if not crud.verify_password(
-        password=cleartext_password,
-        hashed_password=crud.get_user_hashed_password(db=db, user_name=user_name),
+        password=form_data.password,
+        hashed_password=crud.get_user_hashed_password(
+            db=db, user_name=form_data.username
+        ),
     ):
         raise HTTPException(status_code=401, detail="Password incorrect.")
 
-    else:
-        return "Login attempt successful"
+    return {"access_token": form_data.username, "token_type": "bearer"}
+
+
+@app.get("/users/me/", response_model=schemas.User)
+def read_users_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    user = fake_decode_token(token, db=db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content=jsonable_encoder({"detail": exc.errors(), "body": exc.body}),
+    )
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
