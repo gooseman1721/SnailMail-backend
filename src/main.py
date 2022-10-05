@@ -2,11 +2,18 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 from fastapi import Depends, FastAPI, HTTPException, status, Request, Response
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import (
+    OAuth2PasswordBearer,
+    OAuth2PasswordRequestForm,
+    OAuth2AuthorizationCodeBearer,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+
+from fief_client import FiefAccessTokenInfo, FiefAsync
+from fief_client.integrations.fastapi import FiefAuth
 
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
@@ -22,12 +29,28 @@ SECRET_KEY = "835bc2696948b6a858506058675922bf67e19d3f49b065bb12c884b2f5a27016"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 120
 
+
+fief = FiefAsync(
+    "http://localhost:9000",
+    "Ey1OLDHRZlQhCRi9eXFrELu_LQMGaDfqM9JoJ4RJ2C8",
+    "FSrK7Sqzd8oGvARjcMkRJfx5iSUfaP4NmABbLP_S4ww",
+)
+
+scheme = OAuth2AuthorizationCodeBearer(
+    "http://localhost:9000/authorize",
+    "http://localhost:9000/api/token",
+    scopes={"openid": "openid", "offline_access": "offline_access"},
+)
+
+auth = FiefAuth(fief, scheme)
+
 app = FastAPI()
 
 origins = [
     "http://127.0.0.1:5173",
     "http://127.0.0.1:8000",
     "http://127.0.0.1:8080",
+    "http://localhost:9000/"
 ]
 
 app.add_middleware(
@@ -40,8 +63,10 @@ app.add_middleware(
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth_test")
 
+
 class BasicResponse(BaseModel):
     response_text: str
+
 
 def get_db():
     db = SessionLocal()
@@ -238,6 +263,13 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=jsonable_encoder({"detail": exc.errors(), "body": exc.body}),
     )
+
+
+@app.get("/fief_user")
+async def get_fief_user(
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+):
+    return access_token_info
 
 
 if __name__ == "__main__":
