@@ -10,7 +10,7 @@ from fastapi.security import (
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
-from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.cors import CORSMiddleware
 
 from fief_client import FiefAccessTokenInfo, FiefAsync
 from fief_client.integrations.fastapi import FiefAuth
@@ -48,9 +48,12 @@ app = FastAPI()
 
 origins = [
     "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://192.168.1.108:5173",
+    "http://localhost:7000",
     "http://127.0.0.1:8000",
-    "http://127.0.0.1:8080",
-    "http://localhost:9000/"
+    "http://127.0.0.1:9000",
+    "http://localhost:9000"
 ]
 
 app.add_middleware(
@@ -265,7 +268,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-@app.get("/fief_user")
+@app.get("/fief_user/")
 async def get_fief_user(
     access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
 ):
