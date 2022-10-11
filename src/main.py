@@ -68,12 +68,14 @@ def ping():
     return {"response_text": str(time)}
 
 
-@app.post("/user_login_and_get_data/", response_model=schemas.User)
+@app.get("/user_login_and_get_data/", response_model=schemas.User)
 async def user_login_and_get_data(
     access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
     db: Session = Depends(get_db),
 ):
-    email = fief.userinfo(access_token_info.access_token).email
+
+    userinfo = await fief.userinfo(access_token_info["access_token"])
+    email = userinfo["email"]
     db_user_in_db = crud.get_user_by_username(db=db, user_name=email)
     if not db_user_in_db:
         return crud.create_registered_user(db=db, email=email)
