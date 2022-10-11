@@ -3,7 +3,6 @@ from pydantic import BaseModel
 
 from fastapi import Depends, FastAPI, HTTPException, status, Request
 from fastapi.security import (
-    OAuth2PasswordBearer,
     OAuth2AuthorizationCodeBearer,
 )
 from fastapi.exceptions import RequestValidationError
@@ -49,8 +48,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth_test")
 
 
 class BasicResponse(BaseModel):
