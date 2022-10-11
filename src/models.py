@@ -24,7 +24,6 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_name = Column(String(30), unique=True, index=True)
-    hashed_password = Column(String)
     is_online = Column(Boolean, default=True)
 
     sent_messages = relationship(

@@ -1,34 +1,45 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from pydantic import BaseModel
 
-from fastapi import Depends, FastAPI, HTTPException, status, Request, Response
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import Depends, FastAPI, HTTPException, status, Request
+from fastapi.security import (
+    OAuth2AuthorizationCodeBearer,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
-from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.cors import CORSMiddleware
+
+from fief_client import FiefAccessTokenInfo, FiefAsync
+from fief_client.integrations.fastapi import FiefAuth
 
 from sqlalchemy.orm import Session
-from jose import JWTError, jwt
 import uvicorn
 
 from . import crud, models, schemas
 from .database import SessionLocal, engine
+from .constants import FIEF_BASE_URL, CLIENT_ID, CLIENT_SECRET, ALLOWED_ORIGINS
 
 models.Base.metadata.create_all(bind=engine)
 
-# openssl rand -hex 32
-SECRET_KEY = "835bc2696948b6a858506058675922bf67e19d3f49b065bb12c884b2f5a27016"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 120
+
+fief = FiefAsync(
+    FIEF_BASE_URL,
+    CLIENT_ID,
+    CLIENT_SECRET,
+)
+
+scheme = OAuth2AuthorizationCodeBearer(
+    str(FIEF_BASE_URL + "/authorize"),
+    str(FIEF_BASE_URL + "/token"),
+    scopes={"openid": "openid", "offline_access": "offline_access"},
+)
+
+auth = FiefAuth(fief, scheme)
 
 app = FastAPI()
 
-origins = [
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:8000",
-    "http://127.0.0.1:8080",
-]
+origins = ALLOWED_ORIGINS
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,10 +49,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth_test")
 
 class BasicResponse(BaseModel):
     response_text: str
+
 
 def get_db():
     db = SessionLocal()
@@ -51,25 +62,22 @@ def get_db():
         db.close()
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-def fake_decode_token(token, db: Session = Depends(get_db)):
-    return crud.get_user_by_username(db=db, user_name=token)
-
-
 @app.get("/ping/", response_model=BasicResponse)
 def ping():
     time = datetime.utcnow()
     return {"response_text": str(time)}
+
+
+@app.post("/user_login_and_get_data/", response_model=schemas.User)
+async def user_login_and_get_data(
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+    db: Session = Depends(get_db),
+):
+    email = fief.userinfo(access_token_info.access_token).email
+    db_user_in_db = crud.get_user_by_username(db=db, user_name=email)
+    if not db_user_in_db:
+        return crud.create_registered_user(db=db, email=email)
+    return db_user_in_db
 
 
 @app.post("/users/", response_model=schemas.User)
@@ -123,10 +131,11 @@ def create_message(
     sender_name: str,
     receiver_name: str,
     db: Session = Depends(get_db),
-    token: str = Depends(oauth2_scheme),
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
 ):
-    token_data = authenticate_user(token=token, db=db)
-    user_id = crud.convert_user_name_to_user_id(db=db, user_name=token_data.username)
+
+    token_data = fief.userinfo(access_token_info.access_token)
+    user_id = crud.convert_user_name_to_user_id(db=db, user_name=token_data.email)
 
     try:
         sender_id = crud.convert_user_name_to_user_id(db=db, user_name=sender_name)
@@ -151,83 +160,38 @@ def create_message(
     )
 
 
-@app.post("/auth_test/")
-def auth_test(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
-):
-    db_user = crud.get_user_by_username(db=db, user_name=form_data.username)
-    if db_user is None:
-        raise HTTPException(status_code=401, detail="Username incorrect")
-    if not crud.verify_password(
-        password=form_data.password,
-        hashed_password=crud.get_user_hashed_password(
-            db=db, user_name=form_data.username
-        ),
-        db=db,
-    ):
-        raise HTTPException(status_code=401, detail="Password incorrect.")
-
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": form_data.username}, expires_delta=access_token_expires
-    )
-
-    return {"access_token": access_token, "token_type": "bearer"}
-
-
-def authenticate_user(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
-):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    try:
-        payload = jwt.decode(token=token, key=SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-        token_data = schemas.TokenData(username=username)
-    except JWTError:
-        raise credentials_exception
-
-    user = crud.get_user_by_username(db=db, user_name=token_data.username)
-
-    if user is None:
-        raise credentials_exception
-    else:
-        return token_data
-
-
 @app.get("/users/me/", response_model=schemas.User)
-def read_users_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    token_data = authenticate_user(token=token, db=db)
-    user = crud.get_user_by_username(db=db, user_name=token_data.username)
+def read_users_me(
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+    db: Session = Depends(get_db),
+):
+    token_data = fief.userinfo(access_token_info.access_token)
+    user = crud.get_user_by_username(db=db, user_name=token_data.email)
     return user
 
 
 @app.get("/users/me/my_messages/received", response_model=list[schemas.Message])
 def read_users_me_messages_received(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+    db: Session = Depends(get_db),
 ):
-    token_data = authenticate_user(token=token, db=db)
+    token_data = fief.userinfo(access_token_info.access_token)
     received_messages = crud.get_user_received_messages(
         db=db,
-        user_id=crud.convert_user_name_to_user_id(db=db, user_name=token_data.username),
+        user_id=crud.convert_user_name_to_user_id(db=db, user_name=token_data.email),
     )
     return received_messages
 
 
 @app.get("/users/me/my_messages/sent", response_model=list[schemas.Message])
 def read_users_me_messages_sent(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+    db: Session = Depends(get_db),
 ):
-    token_data = authenticate_user(token=token, db=db)
+    token_data = fief.userinfo(access_token_info.access_token)
     sent_messages = crud.get_user_sent_messages(
         db=db,
-        user_id=crud.convert_user_name_to_user_id(db=db, user_name=token_data.username),
+        user_id=crud.convert_user_name_to_user_id(db=db, user_name=token_data.email),
     )
     return sent_messages
 
@@ -238,6 +202,13 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=jsonable_encoder({"detail": exc.errors(), "body": exc.body}),
     )
+
+
+@app.get("/fief_user/")
+async def get_fief_user(
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+):
+    return access_token_info
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
 sql_app
 __pycache__
 snailmail_backend_venv
+src/constants.py
