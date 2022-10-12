@@ -23,8 +23,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_name = Column(String(30), unique=True, index=True)
+    user_email = Column(String(254), unique=True, index=True)
     is_online = Column(Boolean, default=True)
+    user_name = Column(String(64))
 
     sent_messages = relationship(
         "Message", back_populates="sender", foreign_keys=[Message.sender_id]

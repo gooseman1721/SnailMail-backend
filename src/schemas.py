@@ -19,7 +19,7 @@ class Message(MessageBase):
 
 
 class UserBase(BaseModel):
-    user_name: str
+    user_email: str
 
 
 class UserCreate(UserBase):

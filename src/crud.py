@@ -1,25 +1,24 @@
 from sqlalchemy.orm import Session
-from argon2 import PasswordHasher
 
 from . import models, schemas
-
-ph = PasswordHasher()
 
 
 def get_user(db: Session, user_id: int):
     return db.query(models.User).filter(models.User.id == user_id).first()
 
 
-def get_user_by_username(db: Session, user_name: str):
-    return db.query(models.User).filter(models.User.user_name == user_name).first()
+def get_user_by_email(db: Session, user_email: str):
+    return db.query(models.User).filter(models.User.user_email == user_email).first()
 
 
-def convert_user_id_to_user_name(db: Session, user_id: int):
-    return db.query(models.User.user_name).filter(models.User.id == user_id).scalar()
+def convert_user_id_to_user_email(db: Session, user_id: int):
+    return db.query(models.User.user_email).filter(models.User.id == user_id).scalar()
 
 
-def convert_user_name_to_user_id(db: Session, user_name: str):
-    return db.query(models.User.id).filter(models.User.user_name == user_name).scalar()
+def convert_user_email_to_user_id(db: Session, user_email: str):
+    return (
+        db.query(models.User.id).filter(models.User.user_email == user_email).scalar()
+    )
 
 
 def get_user_count(db: Session):
@@ -38,21 +37,21 @@ def get_user_sent_messages(db: Session, user_id: int):
     return db.query(models.Message).filter(models.Message.sender_id == user_id).all()
 
 
-def create_registered_user(db: Session, email: str):
-    db_user = models.User(user_name=email)
+def create_registered_user(db: Session, email: str, username: str):
+    db_user = models.User(user_email=email, user_name=username)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
 
 
-def create_user(db: Session, user: schemas.UserCreate):
-    hashed_password = hash_password(user.password)
-    db_user = models.User(user_name=user.user_name, hashed_password=hashed_password)
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+# def create_user(db: Session, user: schemas.UserCreate):
+#     hashed_password = hash_password(user.password)
+#     db_user = models.User(user_name=user.user_email, hashed_password=hashed_password)
+#     db.add(db_user)
+#     db.commit()
+#     db.refresh(db_user)
+#     return db_user
 
 
 def create_message(
@@ -65,29 +64,3 @@ def create_message(
     db.commit()
     db.refresh(db_message)
     return db_message
-
-
-def hash_password(cleartext_password):
-    return ph.hash(cleartext_password)
-
-
-def verify_password(password: str, hashed_password: str, db: Session):
-    try:
-        print(ph.verify(hashed_password, password))
-        ph.verify(hashed_password, password)
-    except:
-        return False
-    else:
-        if ph.check_needs_rehash(hashed_password):
-            new_password = ph.hash(password)
-            # put new password into db..
-
-        return True
-
-
-def get_user_hashed_password(db: Session, user_name: str):
-    return (
-        db.query(models.User.hashed_password)
-        .filter(models.User.user_name == user_name)
-        .scalar()
-    )

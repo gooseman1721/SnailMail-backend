@@ -76,15 +76,16 @@ async def user_login_and_get_data(
 
     userinfo = await fief.userinfo(access_token_info["access_token"])
     email = userinfo["email"]
-    db_user_in_db = crud.get_user_by_username(db=db, user_name=email)
+    db_user_in_db = crud.get_user_by_email(db=db, user_email=email)
     if not db_user_in_db:
-        return crud.create_registered_user(db=db, email=email)
+        username = userinfo["fields"]["username"]
+        return crud.create_registered_user(db=db, email=email, username=username)
     return db_user_in_db
 
 
 @app.post("/users/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = crud.get_user_by_username(db=db, user_name=user.user_name)
+    db_user = crud.get_user_by_email(db=db, user_email=user.user_email)
     if db_user:
         raise HTTPException(status_code=400, detail="Username already exists")
 
@@ -128,7 +129,7 @@ def get_all_users(db: Session = Depends(get_db)):
 
 
 @app.post("/messages/")
-def create_message(
+async def create_message(
     message: schemas.MessageCreate,
     sender_name: str,
     receiver_name: str,
@@ -136,16 +137,18 @@ def create_message(
     access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
 ):
 
-    token_data = fief.userinfo(access_token_info.access_token)
-    user_id = crud.convert_user_name_to_user_id(db=db, user_name=token_data.email)
+    userinfo = await fief.userinfo(access_token_info["access_token"])
+    user_id = crud.convert_user_email_to_user_id(db=db, user_email=userinfo["email"])
 
     try:
-        sender_id = crud.convert_user_name_to_user_id(db=db, user_name=sender_name)
+        sender_id = crud.convert_user_email_to_user_id(db=db, user_email=sender_name)
     except:
         raise HTTPException(status_code=404, detail="Sender username not found")
 
     try:
-        receiver_id = crud.convert_user_name_to_user_id(db=db, user_name=receiver_name)
+        receiver_id = crud.convert_user_email_to_user_id(
+            db=db, user_email=receiver_name
+        )
     except:
         raise HTTPException(status_code=404, detail="Receiver username not found")
 
@@ -168,7 +171,7 @@ def read_users_me(
     db: Session = Depends(get_db),
 ):
     token_data = fief.userinfo(access_token_info.access_token)
-    user = crud.get_user_by_username(db=db, user_name=token_data.email)
+    user = crud.get_user_by_email(db=db, user_email=token_data.email)
     return user
 
 
@@ -180,7 +183,7 @@ def read_users_me_messages_received(
     token_data = fief.userinfo(access_token_info.access_token)
     received_messages = crud.get_user_received_messages(
         db=db,
-        user_id=crud.convert_user_name_to_user_id(db=db, user_name=token_data.email),
+        user_id=crud.convert_user_email_to_user_id(db=db, user_email=token_data.email),
     )
     return received_messages
 
@@ -193,7 +196,7 @@ def read_users_me_messages_sent(
     token_data = fief.userinfo(access_token_info.access_token)
     sent_messages = crud.get_user_sent_messages(
         db=db,
-        user_id=crud.convert_user_name_to_user_id(db=db, user_name=token_data.email),
+        user_id=crud.convert_user_email_to_user_id(db=db, user_email=token_data.email),
     )
     return sent_messages
 
