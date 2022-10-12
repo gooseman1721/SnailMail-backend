@@ -29,12 +29,20 @@ class UserCreate(UserBase):
 class User(UserBase):
     id: int
     is_online: bool
+    user_name: str
     sent_messages: list[Message] = []
     received_messages: list[Message] = []
 
     class Config:
         orm_mode = True
 
+class UserDisplay(BaseModel):
+    id: int
+    is_online: bool
+    user_name: str
+
+    class Config:
+        orm_mode = True
 
 class Token(BaseModel):
     access_token: str

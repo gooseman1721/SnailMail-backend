@@ -120,12 +120,43 @@ def get_user_received_messages(user_id: int, db: Session = Depends(get_db)):
     return crud.get_user_received_messages(db=db, user_id=user_id)
 
 
-@app.get("/users/all/", response_model=list[schemas.User])
+@app.get("/users/all/", response_model=list[schemas.UserDisplay])
 def get_all_users(db: Session = Depends(get_db)):
     user_count = crud.get_user_count(db=db)
     users = crud.get_many_users(db=db, how_many=user_count)
 
     return users
+
+
+@app.post("/send_message/")
+async def send_message(
+    message: schemas.MessageCreate,
+    sender_id: int,
+    receiver_id: int,
+    db: Session = Depends(get_db),
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+):
+
+    userinfo = await fief.userinfo(access_token_info["access_token"])
+    user_id = crud.convert_user_email_to_user_id(db=db, user_email=userinfo["email"])
+
+    try:
+        sender = crud.get_user(db=db, user_id=sender_id)
+    except:
+        raise HTTPException(status_code=404, detail="Invalid sender")
+
+    try:
+        receiver = crud.get_user(db=db, user_id=receiver_id)
+    except:
+        raise HTTPException(status_code=404, detail="Invalid receiver")
+    # some func that checks if user can send the message (permissions, blocks, bans)...
+
+    if user_id != sender_id:
+        raise HTTPException(status_code=401, detail="Token and user id mismatch")
+
+    return crud.create_message(
+        db=db, message=message, sender_id=sender_id, receiver_id=receiver_id
+    )
 
 
 @app.post("/messages/")
