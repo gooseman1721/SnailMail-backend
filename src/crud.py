@@ -177,7 +177,7 @@ def deny_friendship_request(db: Session, this_user: int, other_user: int):
 
     return db_new_friendship_status
 
-
+# Unblock needed as well
 def block_friendship(db: Session, this_user: int, other_user: int):
     friendship = db.query(models.Friendship).get((other_user, this_user))
     if friendship is None:

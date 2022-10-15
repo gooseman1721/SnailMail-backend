@@ -277,12 +277,12 @@ async def send_friendship_request(
     )
 
 
-@app.get("/user/friends/requests")
+@app.get("/user/friends/requests/")
 async def get_friendship_requests(this_user: int, db: Session = Depends(get_db)):
     return crud.get_friendship_requests_to_this_user(db=db, this_user=this_user)
 
 
-@app.post("/user/friends/requests/{requester_id}")
+@app.post("/user/friends/requests/accept/{requester_id}/")
 async def accept_friendship_request(
     requester_id: int, this_user: int, db: Session = Depends(get_db)
 ):
