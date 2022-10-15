@@ -247,5 +247,49 @@ async def get_fief_user(
     return access_token_info
 
 
+@app.post("/user/friends/send_friend_request/")
+async def send_friendship_request(
+    requester_id: int, adressee_id: int, db: Session = Depends(get_db)
+):
+    friendship = crud.get_friendship(
+        db=db, first_user=requester_id, second_user=adressee_id
+    )
+    if friendship:
+        friendship_status = crud.get_most_recent_friendship_status(
+            db=db, friendship=friendship
+        )
+        match friendship_status.status_code:
+            case "R":
+                raise HTTPException(
+                    status_code=400, detail="Friend request already sent"
+                )
+            case "A":
+                raise HTTPException(
+                    status_code=400, detail="Friend request already accepted"
+                )
+            case "D":
+                raise HTTPException(status_code=403, detail="Friend request denied")
+            case "B":
+                raise HTTPException(status_code=403, detail="Blocked by user")
+
+    return crud.create_friendship_request(
+        db=db, requester_id=requester_id, adressee_id=adressee_id
+    )
+
+
+@app.get("/user/friends/requests")
+async def get_friendship_requests(this_user: int, db: Session = Depends(get_db)):
+    return crud.get_friendship_requests_to_this_user(db=db, this_user=this_user)
+
+
+@app.post("/user/friends/requests/{requester_id}")
+async def accept_friendship_request(
+    requester_id: int, this_user: int, db: Session = Depends(get_db)
+):
+    return crud.accept_friendship_request(
+        db=db, this_user=this_user, other_user=requester_id
+    )
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

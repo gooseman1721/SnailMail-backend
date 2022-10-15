@@ -1,7 +1,27 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
+from sqlalchemy import (
+    Boolean,
+    Column,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Integer,
+    String,
+    DateTime,
+)
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import expression
+from sqlalchemy.ext.compiler import compiles
 
 from .database import Base
+
+
+class utcnow(expression.FunctionElement):
+    type = DateTime()
+    inherit_cache = True
+
+
+@compiles(utcnow, "postgresql")
+def pg_utcnow(element, compiler, **kw):
+    return "TIMEZONE('utc', CURRENT_TIMESTAMP)"
 
 
 class Message(Base):
@@ -33,3 +53,34 @@ class User(Base):
     received_messages = relationship(
         "Message", back_populates="receiver", foreign_keys=[Message.receiver_id]
     )
+
+
+class Friendship(Base):
+    __tablename__ = "friendships"
+
+    requester_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    adressee_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+
+    created_datetime = Column(DateTime, server_default=utcnow())
+
+
+class FriendshipStatus(Base):
+    __tablename__ = "friendship_status"
+
+    requester_id = Column(Integer, primary_key=True)
+    adressee_id = Column(Integer, primary_key=True)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            [requester_id, adressee_id],
+            ["friendships.requester_id", "friendships.adressee_id"],
+        ),
+        {},
+    )
+
+    created_datetime = Column(DateTime, server_default=utcnow(), primary_key=True)
+
+    # Status codes: (R)equested, (A)ccepted, (D)enied, (B)locked
+    status_code = Column(String(1), nullable=False)
+
+    # Specifier = who set this status
+    specifier_id = Column(Integer, ForeignKey("users.id"), nullable=False)

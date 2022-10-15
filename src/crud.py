@@ -64,3 +64,143 @@ def create_message(
     db.commit()
     db.refresh(db_message)
     return db_message
+
+
+# Friendships ------------------------------------------------------------------
+
+
+def create_friendship_request(db: Session, requester_id: int, adressee_id: int):
+    db_new_friendship = models.Friendship(
+        requester_id=requester_id, adressee_id=adressee_id
+    )
+
+    db.add(db_new_friendship)
+    db.commit()
+    db.refresh(db_new_friendship)
+
+    db_new_friendship_status = models.FriendshipStatus(
+        requester_id=requester_id,
+        adressee_id=adressee_id,
+        specifier_id=requester_id,
+        status_code="R",
+    )
+
+    db.add(db_new_friendship_status)
+    db.commit()
+    db.refresh(db_new_friendship_status)
+
+    return db_new_friendship, db_new_friendship_status
+
+
+def get_friendship(db: Session, first_user: int, second_user: int):
+    friendship = db.query(models.Friendship).get((first_user, second_user))
+    if friendship is None:
+        friendship = db.query(models.Friendship).get((second_user, first_user))
+
+    return friendship
+
+
+def get_most_recent_friendship_status(db: Session, friendship: models.Friendship):
+    friendship_status = (
+        db.query(models.FriendshipStatus)
+        .filter(
+            models.FriendshipStatus.adressee_id == friendship.adressee_id,
+            models.FriendshipStatus.requester_id == friendship.requester_id,
+        )
+        .order_by(models.FriendshipStatus.created_datetime.desc())
+        .first()
+    )
+
+    return friendship_status
+
+
+def get_friendship_requests_to_this_user(db: Session, this_user: int):
+    friendships = (
+        db.query(models.Friendship)
+        .filter(models.Friendship.adressee_id == this_user)
+        .all()
+    )
+    if not friendships:
+        return []
+
+    friendship_requests = []
+    for friendship in friendships:
+        most_recent_friendship_status = (
+            db.query(models.FriendshipStatus)
+            .filter(
+                models.FriendshipStatus.adressee_id == friendship.adressee_id,
+                models.FriendshipStatus.requester_id == friendship.requester_id,
+            )
+            .order_by(models.FriendshipStatus.created_datetime.desc())
+            .first()
+        )
+        if most_recent_friendship_status.status_code == "R":
+            friendship_requests.append(most_recent_friendship_status)
+
+    return friendship_requests
+
+
+def accept_friendship_request(db: Session, this_user: int, other_user: int):
+    friendship = db.query(models.Friendship).get((other_user, this_user))
+    if friendship is None:
+        return "DB ERROR: NO FRIENDSHIP FOUND"
+
+    db_new_friendship_status = models.FriendshipStatus(
+        requester_id=other_user,
+        adressee_id=this_user,
+        specifier_id=this_user,
+        status_code="A",
+    )
+
+    db.add(db_new_friendship_status)
+    db.commit()
+    db.refresh(db_new_friendship_status)
+
+    return db_new_friendship_status
+
+
+def deny_friendship_request(db: Session, this_user: int, other_user: int):
+    friendship = db.query(models.Friendship).get((other_user, this_user))
+    if friendship is None:
+        return "DB ERROR: NO FRIENDSHIP FOUND"
+
+    db_new_friendship_status = models.FriendshipStatus(
+        requester_id=other_user,
+        adressee_id=this_user,
+        specifier_id=this_user,
+        status_code="D",
+    )
+
+    db.add(db_new_friendship_status)
+    db.commit()
+    db.refresh(db_new_friendship_status)
+
+    return db_new_friendship_status
+
+
+def block_friendship(db: Session, this_user: int, other_user: int):
+    friendship = db.query(models.Friendship).get((other_user, this_user))
+    if friendship is None:
+        friendship = db.query(models.Friendship).get((this_user, other_user))
+        if friendship is None:
+            return "DB ERROR: NO FRIENDSHIP FOUND"
+
+        db_new_friendship_status = models.FriendshipStatus(
+            requester_id=this_user,
+            adressee_id=other_user,
+            specifier_id=this_user,
+            status_code="B",
+        )
+    else:
+        db_new_friendship_status = models.FriendshipStatus(
+            requester_id=other_user,
+            adressee_id=this_user,
+            specifier_id=this_user,
+            status_code="B",
+        )
+
+    db.add(db_new_friendship_status)
+    db.commit()
+    db.refresh(db_new_friendship_status)
+
+    return db_new_friendship_status
