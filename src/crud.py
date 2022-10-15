@@ -100,6 +100,47 @@ def get_friendship(db: Session, first_user: int, second_user: int):
     return friendship
 
 
+def get_user_friends(db: Session, this_user: int):
+    friendships = (
+        db.query(models.Friendship)
+        .filter(
+            (models.Friendship.adressee_id == this_user)
+            | (models.Friendship.requester_id == this_user)
+        )
+        .all()
+    )
+    if not friendships:
+        return []
+
+    friends = []
+    for friendship in friendships:
+        most_recent_friendship_status = (
+            db.query(models.FriendshipStatus)
+            .filter(
+                models.FriendshipStatus.adressee_id == friendship.adressee_id,
+                models.FriendshipStatus.requester_id == friendship.requester_id,
+            )
+            .order_by(models.FriendshipStatus.created_datetime.desc())
+            .first()
+        )
+        if (
+            most_recent_friendship_status.status_code == "A"
+            or most_recent_friendship_status.status_code == "B"
+        ):
+            # friendships_accepted.append(most_recent_friendship_status)
+            friend_id = (
+                lambda this_user_id: friendship.requester_id
+                if this_user_id == friendship.adressee_id
+                else friendship.adressee_id
+            )
+            friends.append(
+                db.query(models.User)
+                .filter(models.User.id == friend_id(this_user))
+                .first()
+            )
+    return friends
+
+
 def get_most_recent_friendship_status(db: Session, friendship: models.Friendship):
     friendship_status = (
         db.query(models.FriendshipStatus)
@@ -177,6 +218,7 @@ def deny_friendship_request(db: Session, this_user: int, other_user: int):
 
     return db_new_friendship_status
 
+
 # Unblock needed as well
 def block_friendship(db: Session, this_user: int, other_user: int):
     friendship = db.query(models.Friendship).get((other_user, this_user))
@@ -204,3 +246,11 @@ def block_friendship(db: Session, this_user: int, other_user: int):
     db.refresh(db_new_friendship_status)
 
     return db_new_friendship_status
+
+
+def delete_friendships(db: Session):
+    deleted_friendship_status = db.query(models.FriendshipStatus).delete()
+    deleted_friendship = db.query(models.Friendship).delete()
+    db.commit()
+
+    return deleted_friendship_status, deleted_friendship

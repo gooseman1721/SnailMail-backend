@@ -62,6 +62,9 @@ def get_db():
         db.close()
 
 
+# Endpoints ------------------------------------------------------------------
+
+
 @app.get("/ping/", response_model=BasicResponse)
 def ping():
     time = datetime.utcnow()
@@ -249,8 +252,18 @@ async def get_fief_user(
 
 @app.post("/user/friends/send_friend_request/")
 async def send_friendship_request(
-    requester_id: int, adressee_id: int, db: Session = Depends(get_db)
+    adressee_id: int,
+    db: Session = Depends(get_db),
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
 ):
+    requester_id = get_auth_user_id(db=db, access_token_info=access_token_info)
+    db_adressee = crud.get_user(db=db, user_id=adressee_id)
+
+    if requester_id == adressee_id:
+        raise HTTPException(status_code=400, detail="Bad request")
+    if db_adressee is None:
+        raise HTTPException(status_code=400, detail="Bad request")
+
     friendship = crud.get_friendship(
         db=db, first_user=requester_id, second_user=adressee_id
     )
@@ -278,18 +291,55 @@ async def send_friendship_request(
 
 
 @app.get("/user/friends/requests/")
-async def get_friendship_requests(this_user: int, db: Session = Depends(get_db)):
-    return crud.get_friendship_requests_to_this_user(db=db, this_user=this_user)
+async def get_friendship_requests(
+    db: Session = Depends(get_db),
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+):
+    this_user_id = get_auth_user_id(db=db, access_token_info=access_token_info)
+    return crud.get_friendship_requests_to_this_user(db=db, this_user=this_user_id)
 
 
 @app.post("/user/friends/requests/accept/{requester_id}/")
 async def accept_friendship_request(
-    requester_id: int, this_user: int, db: Session = Depends(get_db)
+    requester_id: int,
+    db: Session = Depends(get_db),
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
 ):
-    return crud.accept_friendship_request(
-        db=db, this_user=this_user, other_user=requester_id
+    this_user_id = get_auth_user_id(db=db, access_token_info=access_token_info)
+    friendship_requests = crud.get_friendship_requests_to_this_user(
+        db=db, this_user=this_user_id
     )
+    for request in friendship_requests:
+        if request.requester_id == requester_id:
+            return crud.accept_friendship_request(
+                db=db, this_user=this_user_id, other_user=requester_id
+            )
+    raise HTTPException(status_code=404, detail="Friendship requester not found")
+
+
+@app.get("/user/friends/", response_model=list[schemas.UserDisplay])
+async def get_user_friends(
+    db: Session = Depends(get_db),
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+):
+    this_user_id = await get_auth_user_id(db=db, access_token_info=access_token_info)
+
+    return crud.get_user_friends(db=db, this_user=this_user_id)
+
+
+# DEV ONLY!!!
+@app.delete("/user/friends/requests/")
+async def delete_friendships(db: Session = Depends(get_db)):
+    return crud.delete_friendships(db=db)
+
+
+# Helper functions ------------------------------------------------------------------
+
+# returns user_id of current user
+async def get_auth_user_id(db: Session, access_token_info: FiefAccessTokenInfo):
+    userinfo = await fief.userinfo(access_token_info["access_token"])
+    return crud.convert_user_email_to_user_id(db=db, user_email=userinfo["email"])
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=7000)
