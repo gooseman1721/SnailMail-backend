@@ -250,22 +250,22 @@ async def get_fief_user(
     return access_token_info
 
 
-@app.post("/user/friends/send_friend_request/")
+@app.post("/user/friends/requests/send")
 async def send_friendship_request(
-    adressee_id: int,
+    adressee_id: schemas.UserId,
     db: Session = Depends(get_db),
     access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
 ):
-    requester_id = get_auth_user_id(db=db, access_token_info=access_token_info)
-    db_adressee = crud.get_user(db=db, user_id=adressee_id)
+    requester_id = await get_auth_user_id(db=db, access_token_info=access_token_info)
+    db_adressee = crud.get_user(db=db, user_id=adressee_id.id)
 
-    if requester_id == adressee_id:
+    if requester_id == adressee_id.id:
         raise HTTPException(status_code=400, detail="Bad request")
     if db_adressee is None:
         raise HTTPException(status_code=400, detail="Bad request")
 
     friendship = crud.get_friendship(
-        db=db, first_user=requester_id, second_user=adressee_id
+        db=db, first_user=requester_id, second_user=adressee_id.id
     )
     if friendship:
         friendship_status = crud.get_most_recent_friendship_status(
@@ -286,33 +286,33 @@ async def send_friendship_request(
                 raise HTTPException(status_code=403, detail="Blocked by user")
 
     return crud.create_friendship_request(
-        db=db, requester_id=requester_id, adressee_id=adressee_id
+        db=db, requester_id=requester_id, adressee_id=adressee_id.id
     )
 
 
-@app.get("/user/friends/requests/")
-async def get_friendship_requests(
-    db: Session = Depends(get_db),
-    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
-):
-    this_user_id = get_auth_user_id(db=db, access_token_info=access_token_info)
-    return crud.get_friendship_requests_to_this_user(db=db, this_user=this_user_id)
+# @app.get("/user/friends/requests/")
+# async def get_friendship_requests(
+#     db: Session = Depends(get_db),
+#     access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+# ):
+#     this_user_id = await get_auth_user_id(db=db, access_token_info=access_token_info)
+#     return crud.get_friendship_requests_to_this_user(db=db, this_user=this_user_id)
 
 
-@app.post("/user/friends/requests/accept/{requester_id}/")
+@app.post("/user/friends/requests/accept/")
 async def accept_friendship_request(
-    requester_id: int,
+    requester_id: schemas.UserId,
     db: Session = Depends(get_db),
     access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
 ):
-    this_user_id = get_auth_user_id(db=db, access_token_info=access_token_info)
+    this_user_id = await get_auth_user_id(db=db, access_token_info=access_token_info)
     friendship_requests = crud.get_friendship_requests_to_this_user(
         db=db, this_user=this_user_id
     )
     for request in friendship_requests:
-        if request.requester_id == requester_id:
+        if request.requester_id == requester_id.id:
             return crud.accept_friendship_request(
-                db=db, this_user=this_user_id, other_user=requester_id
+                db=db, this_user=this_user_id, other_user=requester_id.id
             )
     raise HTTPException(status_code=404, detail="Friendship requester not found")
 
@@ -325,6 +325,18 @@ async def get_user_friends(
     this_user_id = await get_auth_user_id(db=db, access_token_info=access_token_info)
 
     return crud.get_user_friends(db=db, this_user=this_user_id)
+
+
+@app.get("/user/friends/requests/", response_model=list[schemas.UserDisplay])
+async def get_users_that_requested_friends_to_user(
+    db: Session = Depends(get_db),
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+):
+    this_user_id = await get_auth_user_id(db=db, access_token_info=access_token_info)
+
+    return crud.get_users_who_requested_friends_to_this_user(
+        db=db, this_user=this_user_id
+    )
 
 
 # DEV ONLY!!!

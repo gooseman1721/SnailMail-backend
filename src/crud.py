@@ -141,6 +141,40 @@ def get_user_friends(db: Session, this_user: int):
     return friends
 
 
+def get_users_who_requested_friends_to_this_user(db: Session, this_user: int):
+    friendships = (
+        db.query(models.Friendship)
+        .filter(models.Friendship.adressee_id == this_user)
+        .all()
+    )
+    if not friendships:
+        return []
+
+    friends = []
+    for friendship in friendships:
+        most_recent_friendship_status = (
+            db.query(models.FriendshipStatus)
+            .filter(
+                models.FriendshipStatus.adressee_id == friendship.adressee_id,
+                models.FriendshipStatus.requester_id == friendship.requester_id,
+            )
+            .order_by(models.FriendshipStatus.created_datetime.desc())
+            .first()
+        )
+        if most_recent_friendship_status.status_code == "R":
+            friend_id = (
+                lambda this_user_id: friendship.requester_id
+                if this_user_id == friendship.adressee_id
+                else friendship.adressee_id
+            )
+            friends.append(
+                db.query(models.User)
+                .filter(models.User.id == friend_id(this_user))
+                .first()
+            )
+    return friends
+
+
 def get_most_recent_friendship_status(db: Session, friendship: models.Friendship):
     friendship_status = (
         db.query(models.FriendshipStatus)

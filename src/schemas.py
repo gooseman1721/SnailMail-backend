@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+# Messages
+
 
 class MessageBase(BaseModel):
     content: str
@@ -16,6 +18,9 @@ class Message(MessageBase):
 
     class Config:
         orm_mode = True
+
+
+# Users
 
 
 class UserBase(BaseModel):
@@ -36,6 +41,7 @@ class User(UserBase):
     class Config:
         orm_mode = True
 
+
 class UserDisplay(BaseModel):
     id: int
     is_online: bool
@@ -43,6 +49,14 @@ class UserDisplay(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class UserId(BaseModel):
+    id: int
+
+
+# Tokens
+
 
 class Token(BaseModel):
     access_token: str
