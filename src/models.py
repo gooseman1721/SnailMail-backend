@@ -30,6 +30,7 @@ class Message(Base):
     content = Column(String(1000))
     sender_id = Column(Integer, ForeignKey("users.id"))
     receiver_id = Column(Integer, ForeignKey("users.id"))
+    created_datetime = Column(DateTime, server_default=utcnow())
 
     sender = relationship(
         "User", back_populates="sent_messages", foreign_keys=[sender_id]

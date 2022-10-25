@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import or_, and_
 
 from . import models, schemas
 
@@ -64,6 +65,31 @@ def create_message(
     db.commit()
     db.refresh(db_message)
     return db_message
+
+
+def get_friend_messages_sorted(
+    db: Session,
+    user_id: int,
+    friend_id: int,
+):
+    all_messages = (
+        db.query(models.Message)
+        .filter(
+            or_(
+                and_(
+                    models.Message.sender_id == user_id,
+                    models.Message.receiver_id == friend_id,
+                ),
+                and_(
+                    models.Message.sender_id == friend_id,
+                    models.Message.receiver_id == user_id,
+                ),
+            )
+        )
+        .order_by(models.Message.created_datetime.desc())
+        .all()
+    )
+    return all_messages
 
 
 # Friendships ------------------------------------------------------------------

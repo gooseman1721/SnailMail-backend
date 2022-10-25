@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel
 
 # Messages
@@ -15,6 +16,7 @@ class Message(MessageBase):
     id: int
     sender_id: int
     receiver_id: int
+    created_datetime: datetime
 
     class Config:
         orm_mode = True
