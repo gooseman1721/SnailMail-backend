@@ -86,7 +86,7 @@ def get_friend_messages_sorted(
                 ),
             )
         )
-        .order_by(models.Message.created_datetime.desc())
+        .order_by(models.Message.created_datetime.asc())
         .all()
     )
     return all_messages
