@@ -367,10 +367,32 @@ async def get_friend_messages(
     }
 
 
+@app.post("/user/friends/{friend_id}/messages/", response_model=schemas.Message)
+async def send_message(
+    message_text: schemas.SendMessageSchema,
+    friend_id: int,
+    db: Session = Depends(get_db),
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+):
+
+    this_user_id = await get_auth_user_id(db=db, access_token_info=access_token_info)
+
+    user_friends = crud.get_user_friends(db=db, this_user=this_user_id)
+    friend = crud.get_user(db=db, user_id=friend_id)
+
+    if friend not in user_friends:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    return crud.create_message(
+        db=db, message=message_text, sender_id=this_user_id, receiver_id=friend_id
+    )
+
+
 # DEV ONLY!!!
 @app.delete("/user/friends/requests/")
 async def delete_friendships(db: Session = Depends(get_db)):
     return crud.delete_friendships(db=db)
+
 
 @app.post("/send_message_DEV/")
 async def send_message(
@@ -378,7 +400,6 @@ async def send_message(
     sender_id: int,
     receiver_id: int,
     db: Session = Depends(get_db),
-    
 ):
 
     return crud.create_message(

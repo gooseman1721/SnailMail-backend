@@ -56,6 +56,9 @@ class UserDisplay(BaseModel):
 class UserId(BaseModel):
     id: int
 
+class SendMessageSchema(BaseModel):
+    content: str
+
 
 # Tokens
 
