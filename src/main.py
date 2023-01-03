@@ -1,7 +1,15 @@
 from datetime import datetime
 from pydantic import BaseModel
 
-from fastapi import Depends, FastAPI, HTTPException, status, Request
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    status,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.security import (
     OAuth2AuthorizationCodeBearer,
 )
@@ -10,7 +18,7 @@ from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from starlette.middleware.cors import CORSMiddleware
 
-from fief_client import FiefAccessTokenInfo, FiefAsync
+from fief_client import FiefAccessTokenInfo, FiefAsync, FiefUserInfo
 from fief_client.integrations.fastapi import FiefAuth
 
 from sqlalchemy.orm import Session
@@ -57,6 +65,45 @@ class BasicResponse(BaseModel):
 class UserChatMessages(BaseModel):
     from_user_id: int
     all_messages: list[schemas.Message] = []
+
+
+class SingleConnection(BaseModel):
+    user_id: int
+    websocket: WebSocket
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[SingleConnection] = []
+
+    def append_connection(self, user_id: int, websocket: WebSocket):
+        self.active_connections.append(
+            SingleConnection(user_id=user_id, websocket=websocket)
+        )
+
+    async def connect(self, user_id: int, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(
+            SingleConnection(user_id=user_id, websocket=websocket)
+        )
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections = [
+            connection
+            for connection in self.active_connections
+            if connection.websocket != websocket
+        ]
+
+    async def notify_user_of_message(self, recipient_id: str):
+        for connection in self.active_connections:
+            if connection.user_id == recipient_id:
+                await connection.websocket.send_text("new message")
+
+
+connections = ConnectionManager()
 
 
 def get_db():
@@ -383,9 +430,31 @@ async def send_message(
     if friend not in user_friends:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    return crud.create_message(
+    message = crud.create_message(
         db=db, message=message_text, sender_id=this_user_id, receiver_id=friend_id
     )
+
+    await connections.notify_user_of_message(friend_id)
+
+    return message
+
+
+@app.websocket("/ws_new_chat_message/{socket_id}/")
+async def ws_new_chat_messages(
+    websocket: WebSocket,
+    socket_id: int,
+    db: Session = Depends(get_db),
+):
+    await websocket.accept()
+    email = await websocket.receive_text()
+    this_user_id = crud.convert_user_email_to_user_id(db, email)
+    connections.append_connection(this_user_id, websocket)
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        connections.disconnect(websocket)
 
 
 # DEV ONLY!!!
