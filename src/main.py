@@ -1,5 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel
+import re
 
 from fastapi import (
     Depends,
@@ -18,7 +19,13 @@ from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from starlette.middleware.cors import CORSMiddleware
 
-from fief_client import FiefAccessTokenInfo, FiefAsync, FiefUserInfo
+from fief_client import (
+    FiefAccessTokenInfo,
+    FiefAsync,
+    FiefUserInfo,
+    FiefAccessTokenInvalid,
+    FiefAccessTokenExpired,
+)
 from fief_client.integrations.fastapi import FiefAuth
 
 from sqlalchemy.orm import Session
@@ -26,7 +33,13 @@ import uvicorn
 
 from . import crud, models, schemas
 from .database import SessionLocal, engine
-from .constants import FIEF_BASE_URL, CLIENT_ID, CLIENT_SECRET, ALLOWED_ORIGINS
+from .constants import (
+    FIEF_BASE_URL,
+    CLIENT_ID,
+    CLIENT_SECRET,
+    ALLOWED_ORIGINS,
+    EMAIL_REGEX,
+)
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -56,6 +69,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+email_regex = re.compile(EMAIL_REGEX)
 
 
 class BasicResponse(BaseModel):
@@ -446,8 +461,27 @@ async def ws_new_chat_messages(
     db: Session = Depends(get_db),
 ):
     await websocket.accept()
-    email = await websocket.receive_text()
+    websocket_auth = await websocket.receive_json()
+    email = websocket_auth["email"]
+    access_token = websocket_auth["access_token"]
+
+    if re.fullmatch(email_regex, email) is False:
+        print("WebSocket message is not a valid email")
+        websocket.close(reason="Invalid email")
+        raise ValueError("Invalid email error")
+
+    try:
+        fief.validate_access_token(access_token)
+    except FiefAccessTokenInvalid:
+        websocket.close(reason="Failed to authorize")
+    except FiefAccessTokenExpired:
+        websocket.close(reason="Access token expired")
+
     this_user_id = crud.convert_user_email_to_user_id(db, email)
+    if this_user_id is None:
+        websocket.close(reason="Invalid email")
+        raise ValueError("DB error")
+
     connections.append_connection(this_user_id, websocket)
 
     try:
