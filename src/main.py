@@ -471,7 +471,7 @@ async def ws_new_chat_messages(
         raise ValueError("Invalid email error")
 
     try:
-        fief.validate_access_token(access_token)
+        await fief.validate_access_token(access_token)
     except FiefAccessTokenInvalid:
         websocket.close(reason="Failed to authorize")
     except FiefAccessTokenExpired:
