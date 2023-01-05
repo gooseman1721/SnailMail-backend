@@ -462,8 +462,8 @@ async def ws_new_chat_messages(
 ):
     await websocket.accept()
     websocket_auth = await websocket.receive_json()
-    email = websocket_auth["email"]
-    access_token = websocket_auth["access_token"]
+    email = str(websocket_auth["email"])
+    access_token = str(websocket_auth["access_token"])
 
     if re.fullmatch(email_regex, email) is False:
         print("WebSocket message is not a valid email")
@@ -471,7 +471,13 @@ async def ws_new_chat_messages(
         raise ValueError("Invalid email error")
 
     try:
-        await fief.validate_access_token(access_token)
+        db_email = (
+            await fief.userinfo(
+                (await fief.validate_access_token(access_token))["access_token"]
+            )
+        )["email"]
+        if db_email != email:
+            raise ValueError("Invalid email error")
     except FiefAccessTokenInvalid:
         websocket.close(reason="Failed to authorize")
     except FiefAccessTokenExpired:
