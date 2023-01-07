@@ -112,10 +112,10 @@ class ConnectionManager:
             if connection.websocket != websocket
         ]
 
-    async def notify_user_of_message(self, recipient_id: str):
+    async def notify_user_of_message(self, sender_id: int, recipient_id: int):
         for connection in self.active_connections:
             if connection.user_id == recipient_id:
-                await connection.websocket.send_text("new message")
+                await connection.websocket.send_text(str(sender_id))
 
 
 connections = ConnectionManager()
@@ -449,7 +449,7 @@ async def send_message(
         db=db, message=message_text, sender_id=this_user_id, receiver_id=friend_id
     )
 
-    await connections.notify_user_of_message(friend_id)
+    await connections.notify_user_of_message(this_user_id, friend_id)
 
     return message
 
