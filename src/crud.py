@@ -92,6 +92,25 @@ def get_friend_messages_sorted(
     return all_messages
 
 
+def get_friend_last_message(
+    db: Session,
+    user_id: int,
+    friend_id: int,
+):
+    last_message = (
+        db.query(models.Message)
+        .filter(
+            and_(
+                models.Message.sender_id == friend_id,
+                models.Message.receiver_id == user_id,
+            )
+        )
+        .order_by(models.Message.created_datetime.desc())
+        .first()
+    )
+    return last_message
+
+
 # Friendships ------------------------------------------------------------------
 
 
