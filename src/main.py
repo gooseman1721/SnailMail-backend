@@ -1,5 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel
+from typing import Union
 import re
 
 from fastapi import (
@@ -427,6 +428,31 @@ async def get_friend_messages(
         "from_user_id": friend_id,
         "all_messages": all_messages,
     }
+
+
+@app.get(
+    "/user/friends/{friend_id}/messages/last/",
+    response_model=Union[schemas.Message, None],
+)
+async def get_friend_last_message(
+    friend_id: int,
+    db: Session = Depends(get_db),
+    access_token_info: FiefAccessTokenInfo = Depends(auth.authenticated()),
+):
+    this_user_id = await get_auth_user_id(db=db, access_token_info=access_token_info)
+
+    user_friends = crud.get_user_friends(db=db, this_user=this_user_id)
+    friend = crud.get_user(db=db, user_id=friend_id)
+
+    if friend not in user_friends:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    last_message = crud.get_friend_last_message(
+        db=db, user_id=this_user_id, friend_id=friend_id
+    )
+    if last_message is None:
+        return None
+    return last_message
 
 
 @app.post("/user/friends/{friend_id}/messages/", response_model=schemas.Message)
